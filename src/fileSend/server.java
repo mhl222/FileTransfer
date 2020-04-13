@@ -17,17 +17,14 @@ public  class server{
 
 }
  class FileChooser extends JFrame {
-     File saveFile = null;
-     File sendFile = null;
+
     ServerSocket server=null;
      Thread ServerThread=null;
 
-     TextField SendPath = new  TextField(15);
      TextField SavePath = new  TextField("C:\\Users\\admin\\Desktop\\新建文件夹",15);
+     File saveFile = new File(SavePath.getText());
      TextField port = new  TextField("8000");
      TextArea sfTA = new TextArea(14,  35);
-     JButton send = new JButton("Send");
-     JButton chooseSend = new JButton("选择");
      JButton chooseSave = new JButton("选择");
      JButton connect = new JButton("运行服务");
      CFListener listener = new CFListener();
@@ -47,18 +44,13 @@ public  class server{
         //CENTER
         Panel Center = new Panel();
         Center.add(sfTA);
-        Center.add(new JLabel("发送文件路径："));
-        Center.add(SendPath);
-        Center.add(chooseSend);
         Center.add(new JLabel("保存文件路径："));
         Center.add(SavePath);
         Center.add(chooseSave);
-        chooseSend.addActionListener(this.listener);
         chooseSave.addActionListener(this.listener);
         this.add(Center,BorderLayout.CENTER);
         //SOUTH
         Panel South = new Panel();
-        South.add(send);
         this.add(South,BorderLayout.SOUTH);
         this.setVisible(true);
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -69,26 +61,23 @@ public  class server{
 
          @Override
          public void actionPerformed(ActionEvent actionEvent) {
-             if(actionEvent.getSource()==chooseSend){
-                 JFileChooser chooser = new JFileChooser();
-                 chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-                 chooser.showDialog(new JLabel(), "选择");
-                 sendFile = chooser.getSelectedFile();
-                 SendPath.setText(sendFile.getAbsoluteFile().toString());
-             }else  if(actionEvent.getSource()==chooseSave){
+              if(actionEvent.getSource()==chooseSave){
                  JFileChooser chooser = new JFileChooser();
                  chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
                  chooser.showDialog(new JLabel(), "选择");
                  saveFile = chooser.getSelectedFile();
                  SavePath.setText(saveFile.getAbsoluteFile().toString());
+                 if(saveFile.isFile())
+                     saveFile=saveFile.getParentFile();
              }else if(actionEvent.getSource()==connect){
                  try {
                       connect.setEnabled(false);
-                     server = new ServerSocket(8000);
+                     server = new ServerSocket(Integer.parseInt(port.getText()));
                      sfTA.append("Server Port :"+port.getText()+"\n");
                      int i = Integer.parseInt(port.getText());
                      sfTA.append("Server Port :"+port.getText()+"\n");
-                     ServerThread  = new Thread(new SeverProcessThread(server));  //
+                     ServerThread  = new Thread(new SeverGetThread(server,server.accept()));  //
+                     sfTA.append("a client connect ...\n");
                      ServerThread.start();
                  } catch (IOException e) {
                      e.printStackTrace();
@@ -97,64 +86,71 @@ public  class server{
              }
          }
      }
-     class SeverProcessThread implements Runnable{
+     class SeverGetThread implements Runnable{
 
         ServerSocket server=null;
+         Socket client=null;
+         InputStream serverIn = null;
+         OutputStream serverOut = null;
 
-         public SeverProcessThread( ServerSocket server) {
+         public SeverGetThread( ServerSocket server,Socket socket) {
 
              this.server = server;
+             this.client=socket;
+             try {
+                  serverIn = client.getInputStream();
+                 serverOut = client.getOutputStream();
+
+             } catch (IOException e) {
+                 e.printStackTrace();
+             }
 
          }
 
          @Override
          public void run() {
-             while (true) {
-                 try {
-                     Socket client= server.accept();
-                     sfTA.append("a client connect ...\n");
-                    InputStream serverIn = client.getInputStream();
-                     OutputStream serverOut =client.getOutputStream();
-                     byte[] fname = new byte[1024];
-                     System.out.println("进入accpet");
+                 while (true) {
+                     try {
 
-                     int len = serverIn.read(fname);
-                     System.out.println("进入1");
+                         byte[] fname = new byte[1024];
+                         System.out.println("进入accpet");
 
-                     String fileName = new String(fname, 0, len);
-                     int isAccept = JOptionPane.showConfirmDialog(null, "是否接受发来文件：" + fileName, "新文件", JOptionPane.YES_NO_OPTION);
-                     System.out.println("进入2");
+                         int len = serverIn.read(fname);
+                         System.out.println("1");
 
-                     if (isAccept == JOptionPane.NO_OPTION) {
-                         serverOut.write("noaccept".getBytes());
+                         String fileName = new String(fname, 0, len);
+                         int isAccept = JOptionPane.showConfirmDialog(null, "是否接受发来文件：" + fileName, "新文件", JOptionPane.YES_NO_OPTION);
 
-                         serverIn.close();
-                         serverOut.close();
+                         if (isAccept == JOptionPane.NO_OPTION) {
+                             serverOut.write("noaccept".getBytes());
+                             continue;
+                         }
+                         serverOut.write("accept".getBytes());
+
+                         saveFile = new File(saveFile, fileName);
+                         System.out.println("2");
+
+                         OutputStream out = new FileOutputStream(saveFile);
+                         System.out.println(saveFile.getAbsoluteFile());
+
+                         byte[] data = new byte[1024];
+                         int dlen = 0;
+                         while ((dlen = serverIn.read(data)) ==1024) {
+                             out.write(data, 0, dlen);
+                             System.out.println(dlen);
+
+                         }
+                         sfTA.append("文件传输完毕\n");
+                         System.out.println("完毕");
+                         saveFile = saveFile.getParentFile();
+                         System.out.println(saveFile.getAbsoluteFile());
+
+                         out.close();
+
+                     } catch (IOException e) {
+                         e.printStackTrace();
                      }
-                     System.out.println("进入3");
-                     serverOut.write("accept".getBytes());
-
-                     saveFile = new File(saveFile, fileName);
-                   OutputStream out = new FileOutputStream(saveFile);
-                     byte[] data = new byte[1024 * 1024];
-                     int datalen = 0;
-                     while ((datalen = serverIn.read(data)) != -1) {
-                         System.out.println("进入4");
-                         out.write(data, 0, datalen);
-
-                     }
-                     sfTA.append("文件传输完毕\n");
-                     saveFile=saveFile.getParentFile();
-
-
-                     serverIn.close();
-                     serverOut.close();
-                     out.close();
-                     client.close();
-                 } catch (IOException e) {
-                     e.printStackTrace();
                  }
-             }
          }
      }
  }
